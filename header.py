@@ -1,0 +1,15 @@
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+    "Cache-Control": "max-age=0",
+    "Dnt": "1",
+    "Priority": "u=0, i",
+    "Sec-Ch-Ua": "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"Microsoft Edge\";v=\"152\"",
+    "Sec-Ch-Ua-Arch": "\"x86\"",
+    "Sec-Ch-Ua-Bitness": "\"64\"",
+    "Sec-Ch-Ua-Full-Version": "\"152.0.4191.53\"",
+    "sec-ch-ua-full-version-list": "\"Chromium\";v=\"152.0.7977.65\", \"Not?A_Brand\";v=\"24.0.0.0\", \"Microsoft Edge\";v=\"152.0.4191.53\"",
+    "sec-ch-ua-mobile": "?0",
+}

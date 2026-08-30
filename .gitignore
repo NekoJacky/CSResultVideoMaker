@@ -1,0 +1,62 @@
+﻿# ===== Python =====
+# 字节码 / 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 打包 / 分发
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# 测试 / 覆盖率
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ===== IDE / 编辑器 =====
+# PyCharm / IntelliJ
+.idea/
+
+# VS Code
+.vscode/
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 日志 / 临时 =====
+*.log
+*.tmp
+*.swp
+
+# ===== 环境变量 / 密钥 =====
+.env
+.env.*
+*.pem
+*.key
+
+# ===== 类型检查 =====
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# ===== 调试 =====
+*.html
