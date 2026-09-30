@@ -1,5 +1,6 @@
 ﻿import time
 import logging
+import random
 import re
 import sys
 from dataclasses import dataclass, field
@@ -23,6 +24,9 @@ HEADERS = header.HEADERS
 TIMEOUT = 15
 RETRIES = 3
 RETRY_BACKOFF = 2  # 秒，指数退避基数
+MIN_REQUEST_DELAY = 0.5
+MAX_REQUEST_DELAY = 2.0
+_last_request_started_at: float | None = None
 
 
 # ===== 数据结构 =====
@@ -40,6 +44,9 @@ class PlayerResultData:
     country: str = str()
     kills: int = 0
     deaths: int = 0
+    rounds: int = 0
+    kpr: float = 0.0
+    survival: float = 0.0
     economy_adjusted_kills: int = 0
     economy_adjusted_deaths: int = 0
     round_swing: float = 0.0
@@ -54,29 +61,64 @@ class PlayerResultData:
 class MapResultData:
     map_name: str = ""
     team_results_on_map: list[TeamResult] = field(default_factory=list)
+    rounds: int = 0
+    players: list[PlayerResultData] = field(default_factory=list)
+    stats_url: str = ""
 
 
 @dataclass
 class ResultData:
     teams: list[str] = field(default_factory=list)
+    event_name: str = ""
     match_time: datetime | None = None
     team_results: list[TeamResult] = field(default_factory=list)
     maps: list[MapResultData] = field(default_factory=list)
+    rounds: int = 0
     players: list[PlayerResultData] = field(default_factory=list)
 
 
 # ===== 请求层 =====
+def _wait_between_requests() -> None:
+    global _last_request_started_at
+
+    if _last_request_started_at is not None:
+        delay = random.uniform(MIN_REQUEST_DELAY, MAX_REQUEST_DELAY)
+        elapsed = time.monotonic() - _last_request_started_at
+        remaining = delay - elapsed
+        if remaining > 0:
+            time.sleep(remaining)
+
+    _last_request_started_at = time.monotonic()
+
+
 def fetch(url: str) -> str:
     for attempt in range(1, RETRIES + 1):
+        _wait_between_requests()
         try:
             resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
             resp.raise_for_status()
             resp.encoding = resp.apparent_encoding
             return resp.text
         except requests.RequestException as exc:
-            wait = RETRY_BACKOFF ** attempt
-            log.warning("请求失败 %s 第%d次: %s，%ds 后重试", url, attempt, exc, wait)
-            time.sleep(wait)
+            if attempt < RETRIES:
+                wait = RETRY_BACKOFF ** attempt
+                log.warning(
+                    "Request failed for %s (attempt %d/%d): %s; retrying in %ds",
+                    url,
+                    attempt,
+                    RETRIES,
+                    exc,
+                    wait,
+                )
+                time.sleep(wait)
+            else:
+                log.error(
+                    "Request failed for %s (attempt %d/%d): %s; retries exhausted",
+                    url,
+                    attempt,
+                    RETRIES,
+                    exc,
+                )
     raise RuntimeError(f"抓取失败，重试耗尽: {url}")
 
 
@@ -84,8 +126,9 @@ def fetch(url: str) -> str:
 def parse_results(html: str) -> list[str]:
     urls: list[str] = []
     soup = BeautifulSoup(html, "lxml")
-    big_results = soup.select("div.big-results")[0]
-    result_con = big_results.select("div.result-con")
+    result_con = soup.select("div.big-results div.result-con")
+    if not result_con:
+        result_con = soup.select("div.result-con")
     for result in result_con:
         link_tag = result.find('a', class_='a-reset')
         if link_tag:
@@ -107,9 +150,15 @@ def parse_results(html: str) -> list[str]:
     return urls
 
 
-def parse_player_stats_tables(stats_content) -> list[PlayerResultData]:
+def parse_player_stats_tables(
+    stats_content,
+    rounds: int = 0,
+) -> list[PlayerResultData]:
     players: list[PlayerResultData] = []
-    for table in stats_content.select("table.totalstats"):
+    tables = stats_content.select("table.totalstats")
+    if not tables:
+        raise ValueError("No player statistics tables found")
+    for table in tables:
         team_name_tag = table.select_one("tr.header-row a.teamName")
         team_name = team_name_tag.get_text(strip=True) if team_name_tag else ""
         for row in table.select("tr:not(.header-row)"):
@@ -120,6 +169,8 @@ def parse_player_stats_tables(stats_content) -> list[PlayerResultData]:
             adjusted_kills, adjusted_deaths = _parse_score_pair(
                 row.select_one("td.kd.eco-adjusted-data")
             )
+            kpr = kills / rounds if rounds else 0.0
+            survival = (rounds - deaths) / rounds * 100 if rounds else 0.0
             players.append(
                 PlayerResultData(
                     team_name=team_name,
@@ -128,6 +179,9 @@ def parse_player_stats_tables(stats_content) -> list[PlayerResultData]:
                     country=country_tag.get("alt", "") if country_tag else "",
                     kills=kills,
                     deaths=deaths,
+                    rounds=rounds,
+                    kpr=kpr,
+                    survival=survival,
                     economy_adjusted_kills=adjusted_kills,
                     economy_adjusted_deaths=adjusted_deaths,
                     round_swing=_parse_stat_float(row.select_one("td.roundSwing")),
@@ -142,28 +196,38 @@ def parse_player_stats_tables(stats_content) -> list[PlayerResultData]:
                     rating=_parse_stat_float(row.select_one("td.rating")),
                 )
             )
+    if not players:
+        raise ValueError("No player statistics rows found")
     return players
+
+
+def _parse_int(value: str | None) -> int:
+    if value is None:
+        raise ValueError("Missing integer value")
+    try:
+        return int(value.strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid integer value: {value!r}") from exc
 
 
 def _parse_score_pair(tag) -> tuple[int, int]:
     if tag is None:
-        return 0, 0
-    values = tag.get_text(strip=True).split("-")
+        raise ValueError("Missing K-D value")
+    raw_value = tag.get_text(strip=True)
+    values = raw_value.split("-")
     if len(values) != 2:
-        return 0, 0
-    try:
-        return int(values[0]), int(values[1])
-    except ValueError:
-        return 0, 0
+        raise ValueError(f"Invalid K-D value: {raw_value!r}")
+    return _parse_int(values[0]), _parse_int(values[1])
 
 
 def _parse_stat_float(tag) -> float:
     if tag is None:
-        return 0.0
+        raise ValueError("Missing numeric statistic")
+    raw_value = tag.get_text(strip=True)
     try:
-        return float(tag.get_text(strip=True).rstrip("%"))
-    except ValueError:
-        return 0.0
+        return float(raw_value.rstrip("%"))
+    except ValueError as exc:
+        raise ValueError(f"Invalid numeric statistic: {raw_value!r}") from exc
 
 
 def _normalize_name(tag) -> str:
@@ -195,13 +259,19 @@ def _parse_match_time(soup: BeautifulSoup) -> datetime | None:
             pass
 
 
+def _parse_event_name(soup: BeautifulSoup) -> str:
+    event_tag = soup.select_one("div.timeAndEvent div.event")
+    return event_tag.get_text(strip=True) if event_tag else ""
+
+
 def print_player_table(players: list[PlayerResultData]) -> None:
     print(
         f"{'Team':<10} {'Player':<10} {'Country':<22} "
         f"{'K-D':>5} {'eK-D':>5} {'Swing':>7} "
-        f"{'ADR':>6} {'eADR':>6} {'KAST':>6} {'eKAST':>6} {'Rating':>7}"
+        f"{'ADR':>6} {'eADR':>6} {'KAST':>6} {'eKAST':>6} "
+        f"{'KPR':>5} {'Surv':>6} {'Rating':>7}"
     )
-    print("-" * 105)
+    print("-" * 128)
     for player in players:
         print(
             f"{player.team_name[:10]:<10} "
@@ -214,6 +284,32 @@ def print_player_table(players: list[PlayerResultData]) -> None:
             f"{player.economy_adjusted_adr:>6.1f} "
             f"{player.kast:>5.1f}% "
             f"{player.economy_adjusted_kast:>5.1f}% "
+            f"{player.kpr:>5.2f} "
+            f"{player.survival:>5.1f}% "
+            f"{player.rating:>7.2f}"
+        )
+
+
+def print_selected_player_stats(
+    scope: str,
+    players: list[PlayerResultData],
+) -> None:
+    print(
+        f"{'Scope':<8} {'Team':<10} {'Player':<12} "
+        f"{'KPR':>6} {'Survival':>9} {'Round Swing':>12} "
+        f"{'ADR':>6} {'KAST':>7} {'Rating':>7}"
+    )
+    print("-" * 97)
+    for player in players:
+        print(
+            f"{scope[:8]:<8} "
+            f"{player.team_name[:10]:<10} "
+            f"{player.nickname[:12]:<12} "
+            f"{player.kpr:>6.3f} "
+            f"{player.survival:>8.1f}% "
+            f"{player.round_swing:>11.2f}% "
+            f"{player.adr:>6.1f} "
+            f"{player.kast:>6.1f}% "
             f"{player.rating:>7.2f}"
         )
 
@@ -235,18 +331,35 @@ def print_match_result(result: ResultData) -> None:
     scores = format_team_scores(result.team_results)
     print("=" * 105)
     print(f"比赛结果: {scores}")
+    if result.event_name:
+        print(f"赛事名称: {result.event_name}")
     if result.match_time:
         print(f"比赛时间: {result.match_time.strftime('%Y-%m-%d %H:%M')}")
     print("=" * 105)
 
-    print("全场选手数据")
+    print(f"全场选手数据（{result.rounds} 回合）")
     print_player_table(result.players)
 
     for map_result in result.maps:
         map_scores = format_team_scores(map_result.team_results_on_map)
         print()
-        print(f"{map_result.map_name}: {map_scores}")
+        print(
+            f"{map_result.map_name}: {map_scores}"
+            f"（{map_result.rounds} 回合）"
+        )
         print_player_table(map_result.players)
+
+    print()
+    print("=" * 97)
+    print("重点选手数据")
+    print_selected_player_stats("全场", result.players)
+    for map_result in result.maps:
+        print()
+        print(
+            f"{map_result.map_name}"
+            f"（{map_result.rounds} 回合）"
+        )
+        print_selected_player_stats(map_result.map_name, map_result.players)
 
 
 def parse_matches_result(urls: list[str]) -> list[ResultData]:
@@ -261,6 +374,7 @@ def parse_matches_result(urls: list[str]) -> list[ResultData]:
 
 def parse_match_result(html: str) -> ResultData:
     soup = BeautifulSoup(html, "lxml")
+    event_name = _parse_event_name(soup)
     match_time = _parse_match_time(soup)
     team_results: list[TeamResult] = []
     teams = soup.select("div.team")
@@ -273,63 +387,109 @@ def parse_match_result(html: str) -> ResultData:
         tmp = team.select_one("div.won")
         if tmp is None:
             tmp = team.select_one("div.lost")
-        if tmp:
-            try:
-                score = int(tmp.get_text(strip=True))
-            except ValueError:
-                score = 0
+        if tmp is None:
+            raise ValueError(f"Missing score for team: {team_name!r}")
+        score = _parse_int(tmp.get_text(strip=True))
         team_results.append(TeamResult(team_name=team_name, score=score))
         # log.info("Team: %-20s Score: %d", team_name, score)
 
     map_holders = soup.select("div.mapholder")
     maps: list[MapResultData] = []
     for map_holder in map_holders:
+        if map_holder.select_one("div.played") is None:
+            continue
         map_name_tag = map_holder.select_one("div.mapname")
         if map_name_tag is None:
-            continue
+            raise ValueError("Missing map name")
         map_name = map_name_tag.get_text(strip=True)
 
         team_name_tags = map_holder.select("div.results-teamname")
         score_tags = map_holder.select("div.results-team-score")
+        if len(team_name_tags) != len(score_tags):
+            raise ValueError(
+                f"Team and score count mismatch for map: {map_name!r}"
+            )
         map_results = [
             TeamResult(
                 team_name=team_name_tag.get_text(strip=True),
-                score=int(score_tag.get_text(strip=True)),
+                score=_parse_int(score_tag.get_text(strip=True)),
             )
             for team_name_tag, score_tag in zip(team_name_tags, score_tags)
         ]
-        maps.append(MapResultData(map_name=map_name, team_results_on_map=map_results))
+        if not map_results:
+            raise ValueError(f"No team results found for map: {map_name!r}")
+        rounds = sum(team_result.score for team_result in map_results)
+        stats_tag = map_holder.select_one("a.results-stats")
+        stats_href = stats_tag.get("href", "") if stats_tag else ""
+        maps.append(
+            MapResultData(
+                map_name=map_name,
+                team_results_on_map=map_results,
+                rounds=rounds,
+                stats_url=urljoin(HLTV_URL, stats_href) if stats_href else "",
+            )
+        )
         # log.info("    Map: %s", map_name)
 
+    total_rounds = sum(map_result.rounds for map_result in maps)
     stats_contents = soup.select("div.matchstats > div.stats-content")
-    players = parse_player_stats_tables(stats_contents[0]) if stats_contents else []
-    for map_result, stats_content in zip(maps, stats_contents[1:]):
-        map_result.players = parse_player_stats_tables(stats_content)
+    if not stats_contents:
+        raise ValueError("No match statistics content found")
+
+    if stats_contents[0].get("id") != "all-content":
+        raise ValueError("Unexpected overall statistics content id")
+
+    map_stats_contents = stats_contents[1:]
+    if len(maps) != len(map_stats_contents):
+        raise ValueError(
+            "Map count and map statistics count do not match: "
+            f"{len(maps)} maps, {len(map_stats_contents)} statistics blocks"
+        )
+
+    players = parse_player_stats_tables(stats_contents[0], total_rounds)
+    for map_result, stats_content in zip(maps, map_stats_contents):
+        stats_id_match = re.search(r"/mapstatsid/(\d+)/", map_result.stats_url)
+        if stats_id_match is None:
+            raise ValueError(
+                f"Missing map stats id for map: {map_result.map_name!r}"
+            )
+        expected_stats_id = f"{stats_id_match.group(1)}-content"
+        actual_stats_id = stats_content.get("id")
+        if actual_stats_id != expected_stats_id:
+            raise ValueError(
+                "Map statistics mismatch: "
+                f"{map_result.map_name!r} expects {expected_stats_id!r}, "
+                f"got {actual_stats_id!r}"
+            )
+        map_result.players = parse_player_stats_tables(
+            stats_content,
+            map_result.rounds,
+        )
 
     return ResultData(
         teams=[team_result.team_name for team_result in team_results],
+        event_name=event_name,
         match_time=match_time,
         team_results=team_results,
         maps=maps,
+        rounds=total_rounds,
         players=players,
     )
 
 
 # ===== 主流程 =====
 def main() -> None:
-    # html = fetch(BASE_URL)
-    # with open("main.html", "w", encoding="utf-8") as f:
-        # f.write(html)
-    # with open("main.html", "r", encoding="utf-8") as f:
-        # html = f.read()
-    # match_urls = parse_results(html)
-    # parse_matches_result(match_urls)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    with open("match.html", "r", encoding="utf-8") as f:
-        html = f.read()
-    result = parse_match_result(html)
-    print_match_result(result)
+
+    html = fetch(BASE_URL)
+    match_urls = parse_results(html)
+    if not match_urls:
+        raise RuntimeError("No match URLs found on the results page")
+
+    results = parse_matches_result(match_urls[:1])
+    for result in results:
+        print_match_result(result)
 
 
 if __name__ == "__main__":
