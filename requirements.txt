@@ -4,3 +4,5 @@
 requests==2.34.2
 beautifulsoup4==4.15.0
 lxml==6.1.2
+# 视频渲染（画面截图）：使用系统已安装的 Chrome/Edge，无需下载 Chromium
+playwright==1.63.0
