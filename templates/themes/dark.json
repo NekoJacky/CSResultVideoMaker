@@ -1,0 +1,11 @@
+{
+  "bg": "#05070c",
+  "panel": "#10151f",
+  "text": "#e6ecf5",
+  "muted": "#77859c",
+  "accent": "#58a6ff",
+  "win": "#3fb950",
+  "lose": "#f85149",
+  "fontFamily": "'Segoe UI', 'Microsoft YaHei', 'Noto Sans SC', sans-serif",
+  "headingWeight": "800"
+}

@@ -2,7 +2,7 @@
 
 尝试写个自动化脚本生成数据视频，不行的话生成数据文章也可以。
 
-当前进度：**数据采集与解析已完成**；视频生成已完成 M1 骨架（`video/` 包，可导出分镜 VideoSpec），渲染与编码待实现。
+当前进度：**数据采集与解析已完成**；视频生成已完成 M1（分镜 VideoSpec）与 M2（Playwright 渲染 + ffmpeg 编码，可产出无声 MP4），下一步是 M3 数据幕与 M4 动效。
 
 ## 功能
 
@@ -73,7 +73,18 @@ python -m video.cli spec --html match.html --out output/spec.json
 python -m video.cli spec --url "https://www.hltv.org/matches/xxx/team-a-vs-team-b"
 ```
 
-`preview`（关键帧预览，M5）与 `build`（渲染 + 编码，M2）为后续里程碑。
+`build` 已可用（M2）：
+
+```bash
+# 从本地比赛页渲染并编码为无声 MP4
+python -m video.cli build --html match.html --out output/result.mp4
+
+# 指定分辨率 / 帧率 / 主题（NVENC 不可用时自动回退 libx264）
+python -m video.cli build --html match.html --out output/result.mp4 \
+    --resolution 1920x1080 --fps 60 --theme default
+```
+
+`preview`（关键帧预览，M5）为后续里程碑。
 
 ## 配置
 
@@ -96,7 +107,13 @@ python -m video.cli spec --url "https://www.hltv.org/matches/xxx/team-a-vs-team-
 │   ├── model.py           # VideoSpec / Scene
 │   ├── scenes.py          # 场景类型注册表
 │   ├── builder.py         # ResultData -> VideoSpec
+│   ├── renderer.py        # Playwright 逐帧渲染（JPEG 帧流）
+│   ├── encoder.py         # ffmpeg 编码 MP4（NVENC / libx264）
 │   └── cli.py             # python -m video.cli
+├── templates/             # 表现层（HTML/CSS/JS + 主题）
+│   ├── base.css / base.js
+│   ├── scenes/            # intro / map_score / player_table / player_board / outro
+│   └── themes/            # default.json / dark.json
 ├── tests/                 # 单元测试（pytest）
 ├── docs/                  # 调研与设计文档
 ├── requirements.txt       # 运行依赖
@@ -139,8 +156,9 @@ python -m pytest
 
 - [ ] 批量抓取与按条件（ID / URL / 日期 / 队伍）选取比赛。
 - [ ] 数据导出（JSON / CSV）。
-- [ ] 设计视频模板并生成分镜与时间轴。
-- [ ] 渲染地图比分、选手数据与重点统计。
-- [ ] 输出 MP4（纯数据呈现，不含解说与字幕）。
+- [x] 设计视频模板并生成分镜与时间轴（M1）。
+- [x] 渲染 + 编码链路，输出无声 MP4（M2）。
+- [ ] 数据幕细化：`map_score` / `player_table` / `outro` 全量呈现与视觉打磨（M3）。
+- [ ] 动效：`renderFrame(t)` 数字滚动与入场动画（M4）。
 
 详细任务见 [todo.md](./todo.md)；视频生成选型见 [docs/video-generation-research.md](./docs/video-generation-research.md)，完整方案设计见 [docs/video-pipeline-design.md](./docs/video-pipeline-design.md)。

@@ -1,0 +1,96 @@
+/* 公共样式：配色、字体、布局工具类。
+   主题通过 renderer 注入的 :root CSS 变量覆盖这里的默认值。 */
+
+:root {
+  --bg: #0b0f17;
+  --panel: #151c28;
+  --text: #e8edf5;
+  --muted: #8a97ab;
+  --accent: #f0b429;
+  --win: #3fb950;
+  --lose: #f85149;
+  --font-family: 'Segoe UI', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --heading-weight: 800;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-family);
+}
+
+.scene {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6vh 6vw;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  padding: 6vh 6vw;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+
+.title {
+  font-weight: var(--heading-weight);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.win {
+  color: var(--win);
+}
+
+.lose {
+  color: var(--lose);
+}
+
+.teams {
+  display: flex;
+  gap: 4vw;
+  align-items: center;
+  justify-content: center;
+}
+
+.team {
+  text-align: center;
+}
+
+.team .name {
+  font-size: 5vh;
+  font-weight: var(--heading-weight);
+  letter-spacing: 0.02em;
+}
+
+.team .score {
+  font-size: 12vh;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.versus {
+  font-size: 4vh;
+  color: var(--muted);
+}

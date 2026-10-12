@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>outro</title>
+  <link rel="stylesheet" href="../base.css">
+  <style>
+    .event {
+      font-size: 3vh;
+      letter-spacing: 0.12em;
+      margin-bottom: 6vh;
+    }
+    .summary {
+      font-size: 2.4vh;
+      margin-bottom: 5vh;
+    }
+    .mvp {
+      text-align: center;
+      font-size: 3vh;
+    }
+    .mvp .label {
+      font-size: 2.4vh;
+      margin-bottom: 1vh;
+    }
+    .mvp .name {
+      font-size: 5vh;
+      font-weight: var(--heading-weight);
+    }
+  </style>
+</head>
+<body>
+  <div class="scene" id="scene">
+    <div class="event accent" id="event"></div>
+    <div class="teams" id="teams"></div>
+    <div class="summary muted" id="summary"></div>
+    <div class="mvp" id="mvp"></div>
+  </div>
+
+  <script src="../base.js"></script>
+  <script>
+    window.initScene = (data) => {
+      document.getElementById('event').textContent = data.event || '';
+
+      const teamsEl = document.getElementById('teams');
+      teamsEl.innerHTML = '';
+      (data.teams || []).forEach((team, i) => {
+        if (i > 0) {
+          const vs = document.createElement('div');
+          vs.className = 'versus';
+          vs.textContent = 'vs';
+          teamsEl.appendChild(vs);
+        }
+        const box = document.createElement('div');
+        box.className = 'team';
+
+        const name = document.createElement('div');
+        name.className = 'name ' + (team.won ? 'win' : 'lose');
+        name.textContent = team.name;
+
+        const score = document.createElement('div');
+        score.className = 'score ' + (team.won ? 'win' : 'lose');
+        score.textContent = team.score;
+
+        box.appendChild(name);
+        box.appendChild(score);
+        teamsEl.appendChild(box);
+      });
+
+      document.getElementById('summary').textContent =
+        (data.totalRounds || 0) + ' 回合 · BO' + (data.mapCount || 0);
+
+      const mvpEl = document.getElementById('mvp');
+      if (data.mvp) {
+        mvpEl.innerHTML = '';
+        const label = document.createElement('div');
+        label.className = 'label muted';
+        label.textContent = 'MVP';
+        const name = document.createElement('div');
+        name.className = 'name accent';
+        name.textContent = (data.mvp.nickname || '') +
+          (data.mvp.team ? ' · ' + data.mvp.team : '');
+        mvpEl.appendChild(label);
+        mvpEl.appendChild(name);
+      } else {
+        mvpEl.textContent = '';
+      }
+    };
+
+    window.renderFrame = (t) => {
+      document.getElementById('scene').style.opacity = '1';
+    };
+  </script>
+</body>
+</html>

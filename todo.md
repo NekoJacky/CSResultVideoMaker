@@ -32,8 +32,8 @@
 > 场均首杀与场均助攻延后，后续在 HLTV 详细统计页定位后补充抓取（不引入 GOTV）。
 
 - [x] **M1 骨架**：`video/model.py` / `scenes.py` / `builder.py` / `cli.py`，`python -m video.cli spec --html match.html` 可导出 VideoSpec（含每图选手数据幕）。
-- [ ] M2 链路：`renderer.py` + `encoder.py`，产出无声 MP4。
-- [ ] M3 数据幕：`map_score` / `player_table` / `outro` 模板。
+- [x] **M2 链路**：`video/renderer.py` + `video/encoder.py` + `templates/`（静态无动画），`python -m video.cli build` 产出无声 MP4（NVENC 优先，回退 libx264）。
+- [ ] M3 数据幕：`map_score` / `player_table` / `outro` 模板（当前已有静态占位版，待补齐 BO3 全量数据呈现与视觉打磨）。
 - [ ] M4 动效：`renderFrame(t)` 驱动的数字滚动与入场动画。
 - [ ] M5 打磨：主题化、榜单幕、预览模式。
 - [ ] M6 批量：多 URL 批处理与背景音乐。
@@ -50,5 +50,5 @@
 - [x] 分镜与 CLI 单元测试（pytest，22 项）＋ `requirements-dev.txt` / `pytest.ini`。
 - [ ] 增加命令行参数入口（选择比赛、输出格式、是否生成视频）。
 - [ ] 增加日志与调试开关，支持保存原始 HTML 便于排查。
-- [ ] 模板契约测试（每个模板都导出 `initScene` / `renderFrame`）。
-- [ ] 渲染冒烟测试（渲染 2s 短片并用 ffprobe 验证）。
+- [x] 模板契约测试（每个模板都导出 `initScene` / `renderFrame`）。
+- [x] 渲染冒烟测试（渲染 2s 短片并用 ffprobe 验证）。

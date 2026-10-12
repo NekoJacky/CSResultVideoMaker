@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>player_board</title>
+  <link rel="stylesheet" href="../base.css">
+  <style>
+    .panel {
+      width: 100%;
+      max-width: 88vw;
+      padding: 5vh 4vw;
+    }
+    .head {
+      text-align: center;
+      margin-bottom: 4vh;
+      font-size: 4.5vh;
+      font-weight: var(--heading-weight);
+    }
+    .boards {
+      display: flex;
+      gap: 3vw;
+      justify-content: center;
+    }
+    .board {
+      flex: 1;
+      min-width: 0;
+    }
+    .board h3 {
+      margin: 0 0 1.6vh;
+      font-size: 2.8vh;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+    }
+    .item {
+      display: flex;
+      justify-content: space-between;
+      gap: 1vw;
+      padding: 1vh 0;
+      font-size: 2.6vh;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .item .who {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .item .val {
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 2.4vh;
+    }
+  </style>
+</head>
+<body>
+  <div class="scene" id="scene">
+    <div class="panel">
+      <div class="head accent">重点榜单</div>
+      <div class="boards" id="boards"></div>
+    </div>
+  </div>
+
+  <script src="../base.js"></script>
+  <script>
+    const BOARDS = [
+      { key: 'topRating', label: 'Rating' },
+      { key: 'topAdr', label: '场均伤害' },
+      { key: 'topKpr', label: '场均击杀' },
+      { key: 'topRoundSwing', label: 'Round Swing' },
+      { key: 'topOpening', label: '场均首杀' },
+    ];
+
+    window.initScene = (data) => {
+      const wrap = document.getElementById('boards');
+      wrap.innerHTML = '';
+      BOARDS.forEach(({ key, label }) => {
+        const board = document.createElement('div');
+        board.className = 'board';
+
+        const h = document.createElement('h3');
+        h.textContent = label;
+        board.appendChild(h);
+
+        const items = data[key] || [];
+        if (!items.length) {
+          const empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = '—';
+          board.appendChild(empty);
+        } else {
+          items.forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'item';
+
+            const who = document.createElement('span');
+            who.className = 'who';
+            who.textContent = (item.nickname || '') + ' (' + (item.team || '') + ')';
+
+            const val = document.createElement('span');
+            val.className = 'val';
+            val.textContent = item.value === null || item.value === undefined
+              ? '—'
+              : Number(item.value).toFixed(2);
+
+            row.appendChild(who);
+            row.appendChild(val);
+            board.appendChild(row);
+          });
+        }
+        wrap.appendChild(board);
+      });
+    };
+
+    window.renderFrame = (t) => {
+      document.getElementById('scene').style.opacity = '1';
+    };
+  </script>
+</body>
+</html>

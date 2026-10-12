@@ -41,11 +41,46 @@ def test_spec_writes_file(sample_result, monkeypatch, tmp_path):
     assert len(data["scenes"]) == 7
 
 
-def test_preview_and_build_are_stubs(sample_result, monkeypatch):
+def test_preview_is_stub(sample_result, monkeypatch):
     monkeypatch.setattr(cli, "_load_result", lambda args: sample_result)
 
     assert cli.main(["preview"]) == 1
-    assert cli.main(["build"]) == 1
+
+
+def test_build_wires_render_and_encode(sample_result, monkeypatch, tmp_path):
+    from video.model import VideoSpec
+
+    spec = VideoSpec(width=640, height=360, fps=30, theme="default", title="t")
+    monkeypatch.setattr(cli, "_load_result", lambda args: sample_result)
+    monkeypatch.setattr(cli, "build_spec", lambda *a, **k: spec)
+    monkeypatch.setattr(cli, "render_frames", lambda s: iter([b"frame"]))
+
+    captured = {}
+
+    def fake_encode(frames, out, *, fps, width, height, music=None):
+        captured.update(
+            fps=fps, width=width, height=height, music=music,
+            frames=list(frames), out=out,
+        )
+
+    monkeypatch.setattr(cli, "encode", fake_encode)
+    out = tmp_path / "result.mp4"
+
+    assert cli.main(["build", "--resolution", "640x360", "--out", str(out)]) == 0
+
+    assert captured["fps"] == 30
+    assert captured["width"] == 640
+    assert captured["height"] == 360
+    assert captured["music"] is None
+    assert captured["frames"] == [b"frame"]
+
+
+def test_parse_resolution():
+    assert cli._parse_resolution("1920x1080") == (1920, 1080)
+    assert cli._parse_resolution("640X360") == (640, 360)
+
+    with pytest.raises(SystemExit):
+        cli._parse_resolution("not-a-resolution")
 
 
 @pytest.mark.skipif(

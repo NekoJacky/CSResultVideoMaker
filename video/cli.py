@@ -1,7 +1,8 @@
 """命令行入口：``python -m video.cli <spec|preview|build>``。
 
-M1 只实现 ``spec``：把比赛解析结果导出为 VideoSpec JSON（分镜调试用）。
-``preview``（关键帧预览）与 ``build``（渲染 + 编码）分别在 M5 / M2 实现。
+- ``spec``：把比赛解析结果导出为 VideoSpec JSON（分镜调试用）。
+- ``build``：渲染 + 编码，产出无声 MP4（M2）。
+- ``preview``：关键帧预览（M5，暂未实现）。
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from pathlib import Path
 from main import ResultData, fetch, parse_match_result
 
 from .builder import build_spec
+from .encoder import encode
+from .renderer import render_frames
 
 
 def _load_result(args: argparse.Namespace) -> ResultData:
@@ -24,9 +27,26 @@ def _load_result(args: argparse.Namespace) -> ResultData:
     raise SystemExit("需要提供数据来源：--html <本地比赛页> 或 --url <HLTV 比赛页>")
 
 
+def _parse_resolution(value: str) -> tuple[int, int]:
+    try:
+        width, height = value.lower().split("x", 1)
+        return int(width), int(height)
+    except (ValueError, AttributeError) as exc:
+        raise SystemExit(
+            f"无效的分辨率: {value!r}（应为 1920x1080 形式）"
+        ) from exc
+
+
 def _cmd_spec(args: argparse.Namespace) -> int:
     result = _load_result(args)
-    spec = build_spec(result, fps=args.fps, theme=args.theme)
+    width, height = _parse_resolution(args.resolution)
+    spec = build_spec(
+        result,
+        width=width,
+        height=height,
+        fps=args.fps,
+        theme=args.theme,
+    )
     text = spec.to_json()
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -47,14 +67,41 @@ def _cmd_preview(args: argparse.Namespace) -> int:
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
-    print("build 将在 M2 实现（Playwright 逐帧渲染 + ffmpeg 编码）")
-    return 1
+    result = _load_result(args)
+    width, height = _parse_resolution(args.resolution)
+    spec = build_spec(
+        result,
+        width=width,
+        height=height,
+        fps=args.fps,
+        theme=args.theme,
+    )
+    frames = render_frames(spec)
+    encode(
+        frames,
+        args.out,
+        fps=spec.fps,
+        width=spec.width,
+        height=spec.height,
+        music=args.music,
+    )
+    print(
+        f"已生成 {args.out}"
+        f"（{len(spec.scenes)} 幕 / {spec.total_duration:.1f}s / "
+        f"{spec.total_frames} 帧 @ {spec.fps}fps）"
+    )
+    return 0
 
 
 def _add_data_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--html", help="本地比赛页 HTML 路径")
     parser.add_argument("--url", help="HLTV 比赛页 URL")
     parser.add_argument("--fps", type=int, default=60, help="帧率（默认 60）")
+    parser.add_argument(
+        "--resolution",
+        default="1920x1080",
+        help="输出分辨率（默认 1920x1080）",
+    )
     parser.add_argument("--theme", default="default", help="主题名（默认 default）")
 
 
