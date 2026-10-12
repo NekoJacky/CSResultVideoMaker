@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>player_table</title>
+  <link rel="stylesheet" href="../base.css">
+  <style>
+    .panel {
+      width: 100%;
+      max-width: 92vw;
+      padding: 5vh 4vw;
+    }
+    .head {
+      text-align: center;
+      margin-bottom: 4vh;
+    }
+    .map-name {
+      font-size: 4.5vh;
+      font-weight: var(--heading-weight);
+      letter-spacing: 0.04em;
+    }
+    .sub {
+      font-size: 2.4vh;
+      margin-top: 0.6vh;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 2.6vh;
+    }
+    th,
+    td {
+      padding: 1.4vh 1vw;
+      text-align: center;
+      white-space: nowrap;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    td {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .team-col {
+      text-align: left;
+      color: var(--muted);
+    }
+    .player-col {
+      text-align: left;
+      font-weight: var(--heading-weight);
+    }
+    .rating {
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .none {
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="scene" id="scene">
+    <div class="panel">
+      <div class="head">
+        <div class="map-name accent" id="map-name"></div>
+        <div class="sub muted" id="sub"></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>选手</th>
+            <th>队伍</th>
+            <th>Rating</th>
+            <th>场均击杀</th>
+            <th>场均伤害</th>
+            <th>场均存活</th>
+            <th>Round Swing</th>
+            <th>场均首杀</th>
+            <th>场均助攻</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="../base.js"></script>
+  <script>
+    const fmt = (value, digits) => {
+      if (value === null || value === undefined) return '—';
+      return Number(value).toFixed(digits);
+    };
+
+    window.initScene = (data) => {
+      document.getElementById('map-name').textContent = data.mapName || '';
+      document.getElementById('sub').textContent = (data.rounds || 0) + ' 回合';
+
+      const rows = document.getElementById('rows');
+      rows.innerHTML = '';
+      (data.players || []).forEach((p) => {
+        const tr = document.createElement('tr');
+
+        const player = document.createElement('td');
+        player.className = 'player-col';
+        player.textContent = p.nickname || '';
+        tr.appendChild(player);
+
+        const team = document.createElement('td');
+        team.className = 'team-col';
+        team.textContent = p.team || '';
+        tr.appendChild(team);
+
+        const rating = document.createElement('td');
+        rating.className = 'rating';
+        rating.textContent = fmt(p.rating, 2);
+        tr.appendChild(rating);
+
+        const kpr = document.createElement('td');
+        kpr.textContent = fmt(p.kpr, 3);
+        tr.appendChild(kpr);
+
+        const adr = document.createElement('td');
+        adr.textContent = fmt(p.adr, 1);
+        tr.appendChild(adr);
+
+        const surv = document.createElement('td');
+        surv.textContent = p.survivalPr === null || p.survivalPr === undefined
+          ? '—'
+          : (p.survivalPr * 100).toFixed(1) + '%';
+        tr.appendChild(surv);
+
+        const swing = document.createElement('td');
+        swing.textContent = fmt(p.roundSwing, 2) + '%';
+        tr.appendChild(swing);
+
+        const opening = document.createElement('td');
+        opening.className = 'none';
+        opening.textContent = fmt(p.openingKpr, 3);
+        tr.appendChild(opening);
+
+        const assists = document.createElement('td');
+        assists.className = 'none';
+        assists.textContent = fmt(p.assistsPr, 3);
+        tr.appendChild(assists);
+
+        rows.appendChild(tr);
+      });
+    };
+
+    window.renderFrame = (t) => {
+      document.getElementById('scene').style.opacity = '1';
+    };
+  </script>
+</body>
+</html>

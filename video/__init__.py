@@ -8,4 +8,4 @@
 设计文档见 docs/video-pipeline-design.md。
 """
 
-__all__ = ["model", "scenes", "builder", "cli"]
+__all__ = ["model", "scenes", "builder", "renderer", "encoder", "cli"]

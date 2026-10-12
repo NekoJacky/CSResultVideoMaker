@@ -2,7 +2,7 @@
 
 尝试写个自动化脚本生成数据视频，不行的话生成数据文章也可以。
 
-当前进度：**数据采集与解析已完成**；视频生成已完成 M1 骨架（`video/` 包，可导出分镜 VideoSpec），渲染与编码待实现。
+当前进度：**数据采集与解析已完成**；视频生成已完成 M1（分镜 VideoSpec）与 M2（Playwright 渲染 + ffmpeg 编码，可产出无声 MP4），下一步是 M3 数据幕与 M4 动效。
 
 ## 功能
 
@@ -41,6 +41,8 @@ python main.py
 
 脚本会抓取 HLTV 赛果页，解析**第一场**比赛并在终端打印结果。
 
+生成视频请用 `python -m video.cli`，见下方[视频生成](#视频生成)。
+
 > 注意：脚本会实时请求 HLTV，请遵守目标站点的使用条款并控制抓取频率。
 
 ## 输出示例
@@ -60,20 +62,82 @@ Team A     player1    Denmark              55-40  52-41   2.10%   85.3   83.1  7
 
 重点选手数据部分会分别打印「全场」与每张地图的 KPR / 生存率 / Round Swing / ADR / KAST / Rating 摘要。
 
-## 视频生成（进行中）
+## 视频生成
 
 `video/` 是视频生成流水线，设计见 [docs/video-pipeline-design.md](./docs/video-pipeline-design.md)。
-当前 M1 可导出分镜规格：
+入口为 `python -m video.cli <命令>`，支持三个子命令：
+
+| 命令 | 说明 | 状态 |
+| --- | --- | --- |
+| `spec` | 导出 VideoSpec JSON（分镜调试） | ✅ 可用 |
+| `build` | Playwright 逐帧渲染 + ffmpeg 编码为无声 MP4 | ✅ 可用（M2） |
+| `preview` | 渲染每幕关键帧 PNG | ⏳ M5 |
+
+### 指定比赛（数据来源）
+
+三个命令都通过 `--html` / `--url` 二选一指定比赛：
+
+- `--html match.html`：使用本地比赛页，不联网，适合调试。
+- `--url "https://www.hltv.org/matches/xxx/..."`：实时抓取该比赛页。
+
+想直接对 HLTV **最新一场**比赛出片时，可先取赛果页第一个链接：
 
 ```bash
-# 从本地比赛页导出 VideoSpec
-python -m video.cli spec --html match.html --out output/spec.json
-
-# 或直接从 HLTV 比赛页
-python -m video.cli spec --url "https://www.hltv.org/matches/xxx/team-a-vs-team-b"
+# 打印最新比赛 URL
+.venv/Scripts/python.exe -c "import main; print(main.parse_results(main.fetch(main.BASE_URL))[0])"
 ```
 
-`preview`（关键帧预览，M5）与 `build`（渲染 + 编码，M2）为后续里程碑。
+### 导出分镜（spec）
+
+```bash
+# 从本地比赛页
+python -m video.cli spec --html match.html --out output/spec.json
+
+# 或实时抓取比赛页（缺省 --out 时打印 JSON 到终端）
+python -m video.cli spec \
+    --url "https://www.hltv.org/matches/2398757/vitality-vs-mouz-esl-pro-league-season-24" \
+    --out output/spec.json
+```
+
+### 生成视频（build）
+
+```bash
+# 从本地比赛页（1080p@60fps）
+python -m video.cli build --html match.html --out output/result.mp4
+
+# 实时抓取最新比赛（1080p@60fps）
+python -m video.cli build \
+    --url "https://www.hltv.org/matches/2398757/vitality-vs-mouz-esl-pro-league-season-24" \
+    --out output/result.mp4 \
+    --resolution 1920x1080 --fps 60 --theme default
+
+# 快速测试（720p@30fps，渲染更快）
+python -m video.cli build \
+    --url "https://www.hltv.org/matches/2398757/vitality-vs-mouz-esl-pro-league-season-24" \
+    --out output/result_720p.mp4 \
+    --resolution 1280x720 --fps 30
+
+# 加背景音乐（可选）
+python -m video.cli build --html match.html --out output/result.mp4 --music bgm.mp3
+```
+
+### 命令参数
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--html` / `--url` | 必选其一 | 本地比赛页 / HLTV 比赛页 |
+| `--out` | `output/result.mp4`（build）/ `output/preview`（preview） | 输出路径；spec 缺省打印到终端 |
+| `--fps` | `60` | 帧率（测试可降到 30） |
+| `--resolution` | `1920x1080` | 输出分辨率，格式 `宽x高` |
+| `--theme` | `default` | 主题名，见 `templates/themes/`（`default` / `dark`） |
+| `--music` | 无 | 背景音乐路径（可选，自动压到 -18dB） |
+
+### 渲染与编码说明
+
+- 浏览器按 **系统 Edge → Chrome → 内置 Chromium** 逐级回退，无需手动下载 Chromium。
+- 编码优先 `h264_nvenc`，探测不到时自动回退 `libx264`。
+- 输出统一为 `yuv420p` + tv-range，保证 B 站 / 微信 / QuickTime 等播放器兼容。
+- 渲染为「逐帧截图 + 管道直喂 ffmpeg」，不落盘中间帧，磁盘占用仅输出 MP4。
 
 ## 配置
 
@@ -92,11 +156,17 @@ python -m video.cli spec --url "https://www.hltv.org/matches/xxx/team-a-vs-team-
 ```
 ├── main.py                # 入口：抓取、解析、数据结构与终端输出
 ├── header.py              # 请求头（User-Agent 等）
-├── video/                 # 视频生成流水线（M1：分镜）
+├── video/                 # 视频生成流水线（M1 分镜 + M2 渲染编码）
 │   ├── model.py           # VideoSpec / Scene
 │   ├── scenes.py          # 场景类型注册表
 │   ├── builder.py         # ResultData -> VideoSpec
+│   ├── renderer.py        # Playwright 逐帧渲染（JPEG 帧流）
+│   ├── encoder.py         # ffmpeg 编码 MP4（NVENC / libx264）
 │   └── cli.py             # python -m video.cli
+├── templates/             # 表现层（HTML/CSS/JS + 主题）
+│   ├── base.css / base.js
+│   ├── scenes/            # intro / map_score / player_table / player_board / outro
+│   └── themes/            # default.json / dark.json
 ├── tests/                 # 单元测试（pytest）
 ├── docs/                  # 调研与设计文档
 ├── requirements.txt       # 运行依赖
@@ -133,14 +203,15 @@ python -m pytest
 
 - 每次运行仅处理赛果页第一场比赛（`main` 中 `match_urls[:1]`）。
 - 仅支持已结束且带统计数据的比赛，页面结构变化可能导致解析异常。
-- 结果目前只打印到终端，尚未落盘为 JSON / CSV。
+- `main.py` 的解析结果目前只打印到终端，尚未直接导出 JSON / CSV（视频分镜可通过 `spec` 命令导出 JSON）。
 
 ## 路线图
 
 - [ ] 批量抓取与按条件（ID / URL / 日期 / 队伍）选取比赛。
 - [ ] 数据导出（JSON / CSV）。
-- [ ] 设计视频模板并生成分镜与时间轴。
-- [ ] 渲染地图比分、选手数据与重点统计。
-- [ ] 输出 MP4（纯数据呈现，不含解说与字幕）。
+- [x] 设计视频模板并生成分镜与时间轴（M1）。
+- [x] 渲染 + 编码链路，输出无声 MP4（M2）。
+- [ ] 数据幕细化：`map_score` / `player_table` / `outro` 全量呈现与视觉打磨（M3）。
+- [ ] 动效：`renderFrame(t)` 数字滚动与入场动画（M4）。
 
 详细任务见 [todo.md](./todo.md)；视频生成选型见 [docs/video-generation-research.md](./docs/video-generation-research.md)，完整方案设计见 [docs/video-pipeline-design.md](./docs/video-pipeline-design.md)。
