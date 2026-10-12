@@ -60,3 +60,7 @@ desktop.ini
 
 # ===== 调试 =====
 *.html
+!templates/**/*.html
+
+# ===== 生成产物 =====
+output/
